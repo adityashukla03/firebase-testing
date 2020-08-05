@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // By default all reads and writes are blocked
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Only admin can read all emoloyeed docs
+    match /employee {
+      allow read: if isAdmin();
+    }
+
+    // Admin can create update read any doc in employee collections
+    // Doc owner can update his doc
+    match /employee/{uid} {
+      allow read: if (request.auth.uid == uid) || isAdmin();
+      allow create: if isAdmin();
+      allow update: if (request.auth.uid == uid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Leaves can be aproved only by admin
+    // Admin can not approve his own leave
+    // For now user can change only remark field if leave is not aproved
+    match /employee/{uid}/leaves/{leaveId} {
+      allow read: if request.auth.uid == uid || isAdmin();
+      allow update: if (request.auth.uid == uid &&
+        request.resource.data.status != 'Approved' &&
+        allowedFieldsToUpdateByDocOwner(['remark'])) ||
+        (isAdmin() && allowedFieldsToUpdateByAdmin(['status']) && 
+         request.auth.uid != uid);
+    }
+
+    // Verifying admin claim
+    function isAdmin() {
+      return request.auth.token.admin == true;
+    }
+    // Verifying if affected fields has only allowed fields for doc owner
+    function allowedFieldsToUpdateByDocOwner(allowedFields) {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(allowedFields);
+    }
+
+    // Verifying if affected fields has only allowed fields for admin
+    function allowedFieldsToUpdateByAdmin(allowedFields) {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(allowedFields);
+    }
+  }
+}

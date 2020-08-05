@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // By default all reads and write are blocked
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // employee can update only its own doc
+    match /employee/{uid} {
+        allow read, update: if (request.auth.uid == uid);
+    }
+
+    // User can only edit remark field if leave status is not approved
+    match /employee/{uid}/leaves/{leaveId} {
+      allow update: 
+      if ((request.auth.uid == uid &&
+            request.resource.data.status != 'Approved' &&
+            allowedFieldsToUpdateByDocOwner(['remark']))
+          // (request.auth.uid != uid &&
+          //   request.auth.token.admin == true &&
+          //   allowedFieldsToUpdateByAdmin(['status']))
+          );
+    }
+    // checking for allowed fields that
+    function allowedFieldsToUpdateByDocOwner(allowedFields) {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly(allowedFields);
+    }
+
+    // function allowedFieldsToUpdateByAdmin(allowedFields) {
+    //   let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+    //   return affectedKeys.hasOnly(allowedFields);
+    // }
+  }
+}
